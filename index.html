@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pong Game</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #1b2a42, #06070b);
+        color: #f8f8f2;
+        display: flex;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .game-shell {
+        display: grid;
+        gap: 16px;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 2rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      canvas {
+        border: 3px solid rgba(255, 255, 255, 0.25);
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(17, 25, 40, 0.85), rgba(8, 11, 18, 0.95));
+        box-shadow: 0 25px 45px rgba(0, 0, 0, 0.45);
+      }
+
+      .hud {
+        display: flex;
+        gap: 24px;
+        font-size: 0.95rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        color: rgba(248, 248, 242, 0.85);
+      }
+
+      .pill {
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game-shell">
+      <h1>Retro Pong</h1>
+      <canvas id="pong" width="800" height="480" aria-label="Pong game"></canvas>
+      <div class="hud">
+        <span class="pill">Left Paddle: W / S</span>
+        <span class="pill">Right Paddle: ↑ / ↓</span>
+        <span class="pill">Pause: P</span>
+        <span class="pill">Reset: R</span>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("pong");
+      const ctx = canvas.getContext("2d");
+
+      const state = {
+        paused: false,
+        keys: new Set(),
+        left: {
+          x: 24,
+          y: canvas.height / 2 - 50,
+          width: 14,
+          height: 100,
+          speed: 6,
+          score: 0,
+        },
+        right: {
+          x: canvas.width - 38,
+          y: canvas.height / 2 - 50,
+          width: 14,
+          height: 100,
+          speed: 6,
+          score: 0,
+        },
+        ball: {
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+          radius: 8,
+          vx: 5,
+          vy: 3,
+          speed: 5,
+        },
+      };
+
+      const centerBall = (direction = 1) => {
+        state.ball.x = canvas.width / 2;
+        state.ball.y = canvas.height / 2;
+        state.ball.vx = direction * state.ball.speed;
+        state.ball.vy = (Math.random() * 4 - 2) || 2;
+      };
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      const updatePaddles = () => {
+        if (state.keys.has("KeyW")) {
+          state.left.y -= state.left.speed;
+        }
+        if (state.keys.has("KeyS")) {
+          state.left.y += state.left.speed;
+        }
+        if (state.keys.has("ArrowUp")) {
+          state.right.y -= state.right.speed;
+        }
+        if (state.keys.has("ArrowDown")) {
+          state.right.y += state.right.speed;
+        }
+
+        state.left.y = clamp(state.left.y, 12, canvas.height - state.left.height - 12);
+        state.right.y = clamp(state.right.y, 12, canvas.height - state.right.height - 12);
+      };
+
+      const paddleCollision = (paddle) => {
+        const withinY =
+          state.ball.y + state.ball.radius > paddle.y &&
+          state.ball.y - state.ball.radius < paddle.y + paddle.height;
+        const withinX =
+          state.ball.x + state.ball.radius > paddle.x &&
+          state.ball.x - state.ball.radius < paddle.x + paddle.width;
+
+        if (withinX && withinY) {
+          const hitPos = (state.ball.y - (paddle.y + paddle.height / 2)) / (paddle.height / 2);
+          const angle = hitPos * (Math.PI / 3);
+          const direction = paddle === state.left ? 1 : -1;
+          state.ball.vx = direction * state.ball.speed * Math.cos(angle);
+          state.ball.vy = state.ball.speed * Math.sin(angle);
+        }
+      };
+
+      const updateBall = () => {
+        state.ball.x += state.ball.vx;
+        state.ball.y += state.ball.vy;
+
+        if (state.ball.y - state.ball.radius <= 8 || state.ball.y + state.ball.radius >= canvas.height - 8) {
+          state.ball.vy *= -1;
+        }
+
+        paddleCollision(state.left);
+        paddleCollision(state.right);
+
+        if (state.ball.x < -30) {
+          state.right.score += 1;
+          centerBall(1);
+        }
+        if (state.ball.x > canvas.width + 30) {
+          state.left.score += 1;
+          centerBall(-1);
+        }
+      };
+
+      const drawNet = () => {
+        ctx.strokeStyle = "rgba(255,255,255,0.2)";
+        ctx.lineWidth = 4;
+        ctx.setLineDash([12, 12]);
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, 12);
+        ctx.lineTo(canvas.width / 2, canvas.height - 12);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      };
+
+      const drawScore = () => {
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.font = "bold 48px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`${state.left.score}`, canvas.width / 2 - 80, 60);
+        ctx.fillText(`${state.right.score}`, canvas.width / 2 + 80, 60);
+      };
+
+      const drawOverlay = (text) => {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#f8f8f2";
+        ctx.font = "bold 28px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      };
+
+      const draw = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillRect(state.left.x, state.left.y, state.left.width, state.left.height);
+        ctx.fillRect(state.right.x, state.right.y, state.right.width, state.right.height);
+
+        ctx.beginPath();
+        ctx.fillStyle = "#f8f8f2";
+        ctx.arc(state.ball.x, state.ball.y, state.ball.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawNet();
+        drawScore();
+
+        if (state.paused) {
+          drawOverlay("Paused");
+        }
+      };
+
+      const gameLoop = () => {
+        if (!state.paused) {
+          updatePaddles();
+          updateBall();
+        }
+        draw();
+        requestAnimationFrame(gameLoop);
+      };
+
+      const resetGame = () => {
+        state.left.score = 0;
+        state.right.score = 0;
+        state.left.y = canvas.height / 2 - state.left.height / 2;
+        state.right.y = canvas.height / 2 - state.right.height / 2;
+        centerBall(Math.random() > 0.5 ? 1 : -1);
+      };
+
+      document.addEventListener("keydown", (event) => {
+        if (["ArrowUp", "ArrowDown", "KeyW", "KeyS", "KeyP", "KeyR"].includes(event.code)) {
+          event.preventDefault();
+        }
+        if (event.code === "KeyP") {
+          state.paused = !state.paused;
+          return;
+        }
+        if (event.code === "KeyR") {
+          resetGame();
+          return;
+        }
+        state.keys.add(event.code);
+      });
+
+      document.addEventListener("keyup", (event) => {
+        state.keys.delete(event.code);
+      });
+
+      resetGame();
+      gameLoop();
+    </script>
+  </body>
+</html>
